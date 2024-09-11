@@ -1,74 +1,83 @@
 package dev.marvinkassabian.zenithclock
 
 import android.app.AlarmManager
-import android.app.PendingIntent
+import android.app.TimePickerDialog
 import android.content.Context
-import android.content.Intent
-import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
-import android.widget.Button
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.widget.TextView
-import android.widget.TimePicker
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import java.util.Calendar
+
+data class Alarm(val hourOfDay: Int, val minute: Int)
+
+class AlarmViewHolder(alarmView: View) : RecyclerView.ViewHolder(alarmView) {
+    val titleTextView: TextView = itemView.findViewById(R.id.titleTextView)
+    val descriptionTextView: TextView = itemView.findViewById(R.id.descriptionTextView)
+}
+
+class AlarmAdapter(private val alarms: MutableList<Alarm>) : RecyclerView.Adapter<AlarmViewHolder>() {
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AlarmViewHolder {
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.alarm_layout, parent, false)
+        return AlarmViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: AlarmViewHolder, position: Int) {
+        val alarm = alarms[position]
+        holder.titleTextView.text = alarm.hourOfDay.toString()
+        holder.descriptionTextView.text = alarm.minute.toString()
+    }
+
+    override fun getItemCount(): Int {
+        return alarms.size
+    }
+}
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var alarmManager: AlarmManager
-    private lateinit var timePicker: TimePicker
-    private lateinit var setAlarmButton: Button
-    private lateinit var alarmStatus: TextView
+    private lateinit var recyclerView: RecyclerView
+    private lateinit var fab: FloatingActionButton
+    private lateinit var adapter: RecyclerView.Adapter<AlarmViewHolder>
+    private val alarms: MutableList<Alarm> = mutableListOf()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        timePicker = findViewById(R.id.timePicker)
-        setAlarmButton = findViewById(R.id.setAlarmButton)
-        alarmStatus = findViewById(R.id.alarmStatus)
 
-        setAlarmButton.setOnClickListener {
-            checkAndSetAlarm()
+        recyclerView = findViewById(R.id.alarmRecyclerView)
+        fab = findViewById(R.id.fabAddAlarm)
+
+        adapter = AlarmAdapter(alarms)
+        recyclerView.adapter = adapter
+        recyclerView.layoutManager = LinearLayoutManager(this)
+
+        fab.setOnClickListener {
+            showTimePicker()
         }
     }
 
+    private fun showTimePicker() {
+        val calendar = Calendar.getInstance()
+        val currentHour = calendar.get(Calendar.HOUR_OF_DAY)
+        val currentMinute = calendar.get(Calendar.MINUTE)
 
-    private fun checkAndSetAlarm() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms()) {
-            setAlarm()
-        } else {
-            requestExactAlarmPermission()
-        }
-    }
-
-    private fun setAlarm() {
-        val hour = timePicker.hour
-        val minute = timePicker.minute
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, hour)
-            set(Calendar.MINUTE, minute)
-            set(Calendar.SECOND, 0)
-        }
-
-        val intent = Intent(this, AlarmReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(
-            this,
-            0,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val timePickerDialog = TimePickerDialog(
+            this, { _, hourOfDay, minute ->
+                alarms.add(Alarm(hourOfDay, minute))
+                adapter.notifyItemInserted(alarms.size)
+                Toast.makeText(this, "Alarm set for $hourOfDay $minute", Toast.LENGTH_SHORT).show()
+            }, currentHour, currentMinute, false
         )
 
-        alarmManager.setExact(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
-
-        alarmStatus.text = "Alarm set for $hour:$minute"
-    }
-
-    private fun requestExactAlarmPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-            startActivity(intent)
-        }
+        timePickerDialog.show()
     }
 }
